@@ -1,0 +1,7 @@
+pandas
+certifi
+python-dotenv
+sqlalchemy
+pymysql
+dash
+plotly
