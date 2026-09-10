@@ -5,3 +5,4 @@ data/raw/*.csv
 data/staging/*.csv
 logs/*.log
 .venv/
+data/staging/.rows_processed
