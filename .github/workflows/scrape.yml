@@ -1,0 +1,33 @@
+name: Crypto Data Scraper
+
+# Runs automatically every 5 minutes, forever, without needing your laptop on.
+# Public repos get unlimited free GitHub Actions minutes, so this costs nothing.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:  # lets you manually trigger a run from the Actions tab, useful for testing
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run one fetch + load cycle
+        env:
+          CMC_API_KEY: ${{ secrets.CMC_API_KEY }}
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_PORT: ${{ secrets.MYSQL_PORT }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+          MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
+        run: python run.py --once --load-db
