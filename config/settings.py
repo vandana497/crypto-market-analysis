@@ -16,10 +16,6 @@ load_dotenv()  # reads .env in project root if present
 
 # --- API ---
 CMC_API_KEY = os.getenv("CMC_API_KEY", "").strip()
-if not CMC_API_KEY:
-    raise EnvironmentError(
-        "CMC_API_KEY not set. Copy .env.example to .env and add your key."
-    )
 
 CMC_BASE_URL = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest"
 
