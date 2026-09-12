@@ -5,3 +5,4 @@ sqlalchemy
 pymysql
 dash
 plotly
+gunicorn

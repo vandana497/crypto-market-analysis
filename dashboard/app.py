@@ -1,21 +1,19 @@
 """
 Crypto Market Cap Dashboard.
 
-Run with:
+Local run:
     python dashboard/app.py
+    -> http://127.0.0.1:8050
 
-Then open http://127.0.0.1:8050 in your browser.
-
-Structure: one tab per key finding from the analysis phase, plus a
-pipeline health tab so the "data engineering" side of the project is
-visible too, not just the charts.
+Production (Render): gunicorn runs this via the `server` object below,
+using the command in the Procfile. Render assigns the port dynamically
+via the PORT environment variable, so we never hardcode 8050 for prod.
 """
 
+import os
 import sys
 from pathlib import Path
 
-# allow running this file directly (python dashboard/app.py) while still
-# importing from the project's src/config packages at the root
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import dash
@@ -34,9 +32,10 @@ from dashboard.data import (
 )
 
 app = dash.Dash(__name__, title="Crypto Market Dashboard")
+server = app.server  # gunicorn (Render) imports this - Dash's Flask instance underneath
 
 CARD_STYLE = {
-    "backgroundColor": "#140303",
+    "backgroundColor": "#ffffff",
     "borderRadius": "8px",
     "padding": "20px",
     "boxShadow": "0 1px 3px rgba(0,0,0,0.1)",
@@ -44,11 +43,12 @@ CARD_STYLE = {
 }
 
 app.layout = html.Div(
-    style={"backgroundColor": "#E4C674", "fontFamily": "Arial, sans-serif", "padding": "30px"},
+    style={"backgroundColor": "#f5f6fa", "fontFamily": "Arial, sans-serif", "padding": "30px"},
     children=[
         html.H1("Crypto Market Cap Analytics", style={"marginBottom": "4px"}),
         html.P(
-            "Data collected via CoinMarketCap API, top 50 coins by market cap, refreshed throughout the day.",
+            "Data collected via CoinMarketCap API, top 50 coins by market cap, "
+            "refreshed automatically via a scheduled cloud pipeline.",
             style={"color": "#666", "marginBottom": "24px"},
         ),
         dcc.Tabs(
@@ -188,4 +188,6 @@ def render_health_tab():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # local dev only - Render uses gunicorn + the `server` object instead of this
+    port = int(os.getenv("PORT", 8050))
+    app.run(debug=True, host="0.0.0.0", port=port)
