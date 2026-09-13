@@ -6,3 +6,5 @@ pymysql
 dash
 plotly
 gunicorn
+requests
+vaderSentiment
