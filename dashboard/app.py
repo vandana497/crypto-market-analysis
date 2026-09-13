@@ -30,6 +30,7 @@ from dashboard.data import (
     get_pipeline_health,
     get_data_completeness,
 )
+from dashboard.news import fetch_latest_news, get_news_with_sentiment_for_coin
 
 app = dash.Dash(__name__, title="Crypto Market Dashboard")
 server = app.server  # gunicorn (Render) imports this - Dash's Flask instance underneath
@@ -56,6 +57,7 @@ app.layout = html.Div(
             value="movers",
             children=[
                 dcc.Tab(label="Top Movers", value="movers"),
+                dcc.Tab(label="Why It Moved (News)", value="news"),
                 dcc.Tab(label="Volatility Leaderboard", value="volatility"),
                 dcc.Tab(label="Consistent Movers", value="consistent"),
                 dcc.Tab(label="Market Cap Trends", value="trends"),
@@ -71,6 +73,8 @@ app.layout = html.Div(
 def render_tab(tab):
     if tab == "movers":
         return render_movers_tab()
+    elif tab == "news":
+        return render_news_tab()
     elif tab == "volatility":
         return render_volatility_tab()
     elif tab == "consistent":
@@ -104,6 +108,54 @@ def render_movers_tab():
         html.Div(dcc.Graph(figure=gainers_fig), style=CARD_STYLE),
         html.Div(dcc.Graph(figure=losers_fig), style=CARD_STYLE),
     ])
+
+
+def render_news_tab():
+    latest_date = get_latest_date()
+    top_gainers = get_top_movers(latest_date, direction="gainers", limit=3)
+    top_losers = get_top_movers(latest_date, direction="losers", limit=3)
+
+    # one shared news fetch, reused across all coins we check - avoids
+    # hitting the free API repeatedly for what's really one page load
+    articles = fetch_latest_news(limit=100)
+
+    coins_to_check = list(top_gainers.itertuples()) + list(top_losers.itertuples())
+    sentiment_color = {"Positive": "#2ecc71", "Negative": "#e74c3c", "Neutral": "#95a5a6", "No coverage found": "#bdc3c7"}
+
+    cards = []
+    for coin in coins_to_check:
+        result = get_news_with_sentiment_for_coin(articles, coin.name, coin.symbol)
+        headline_items = [
+            html.Li([
+                html.A(a["title"], href=a["link"], target="_blank", style={"color": "#2c3e50"}),
+                html.Span(f"  ({a['source']}, {a['sentiment_label']})", style={"color": "#888", "fontSize": "12px"}),
+            ])
+            for a in result["articles"]
+        ] or [html.Li("No recent headlines matched this coin.", style={"color": "#999"})]
+
+        cards.append(html.Div([
+            html.Div([
+                html.Span(f"{coin.name} ({coin.symbol})", style={"fontWeight": "bold", "fontSize": "16px"}),
+                html.Span(f"  {coin.pct_change_intraday:+.2f}%", style={"color": "#2ecc71" if coin.pct_change_intraday >= 0 else "#e74c3c", "marginLeft": "10px"}),
+                html.Span(
+                    result["overall_sentiment"],
+                    style={
+                        "backgroundColor": sentiment_color.get(result["overall_sentiment"], "#ccc"),
+                        "color": "white", "borderRadius": "4px", "padding": "2px 8px",
+                        "marginLeft": "10px", "fontSize": "12px",
+                    },
+                ),
+            ]),
+            html.Ul(headline_items, style={"marginTop": "8px"}),
+        ], style=CARD_STYLE))
+
+    note = html.P(
+        "Matches today's biggest gainers/losers against the latest crypto news headlines, "
+        "with sentiment scored via offline NLP (VADER). Live/current-day only - the free news "
+        "feed doesn't support historical search.",
+        style={"color": "#666", "fontSize": "13px"},
+    )
+    return html.Div([note] + cards)
 
 
 def render_volatility_tab():
