@@ -30,7 +30,7 @@ from dashboard.data import (
     get_pipeline_health,
     get_data_completeness,
 )
-from dashboard.news import fetch_latest_news, get_news_with_sentiment_for_coin
+from dashboard.news import get_news_with_sentiment_for_coin
 
 app = dash.Dash(__name__, title="Crypto Market Dashboard")
 server = app.server  # gunicorn (Render) imports this - Dash's Flask instance underneath
@@ -115,16 +115,15 @@ def render_news_tab():
     top_gainers = get_top_movers(latest_date, direction="gainers", limit=3)
     top_losers = get_top_movers(latest_date, direction="losers", limit=3)
 
-    # one shared news fetch, reused across all coins we check - avoids
-    # hitting the free API repeatedly for what's really one page load
-    articles = fetch_latest_news(limit=100)
-
     coins_to_check = list(top_gainers.itertuples()) + list(top_losers.itertuples())
     sentiment_color = {"Positive": "#2ecc71", "Negative": "#e74c3c", "Neutral": "#95a5a6", "No coverage found": "#bdc3c7"}
 
     cards = []
     for coin in coins_to_check:
-        result = get_news_with_sentiment_for_coin(articles, coin.name, coin.symbol)
+        # one Currents API search call per coin (keyword-driven endpoint,
+        # not a bulk feed we filter client-side) - stays within the 250/day
+        # free quota easily at 6 coins x however often the page is loaded
+        result = get_news_with_sentiment_for_coin(coin.name, coin.symbol)
         headline_items = [
             html.Li([
                 html.A(a["title"], href=a["link"], target="_blank", style={"color": "#2c3e50"}),
@@ -150,9 +149,8 @@ def render_news_tab():
         ], style=CARD_STYLE))
 
     note = html.P(
-        "Matches today's biggest gainers/losers against the latest crypto news headlines, "
-        "with sentiment scored via offline NLP (VADER). Live/current-day only - the free news "
-        "feed doesn't support historical search.",
+        "Matches today's biggest gainers/losers against live news search (Currents API), "
+        "with sentiment scored via offline NLP (VADER). Live/current-day only.",
         style={"color": "#666", "fontSize": "13px"},
     )
     return html.Div([note] + cards)

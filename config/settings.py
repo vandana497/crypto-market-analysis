@@ -1,11 +1,5 @@
 """
 Centralized configuration for the crypto market cap pipeline.
-
-Why this file exists:
-- No hardcoded API keys or Windows paths anywhere else in the codebase.
-- One place to change limits, intervals, or paths.
-- Uses pathlib so it works the same on Windows/Mac/Linux (your original
-  notebook used a raw C:\\Users\\... path, which only ran on one machine).
 """
 
 import os
@@ -14,27 +8,29 @@ from dotenv import load_dotenv
 
 load_dotenv()  # reads .env in project root if present
 
-# --- API ---
+# --- API keys ---
 CMC_API_KEY = os.getenv("CMC_API_KEY", "").strip()
+CURRENTS_API_KEY = os.getenv("CURRENTS_API_KEY", "").strip()
+# Note: not hard-raising if CMC_API_KEY is missing - the dashboard imports
+# this module too but never calls the CoinMarketCap API, so it shouldn't
+# hard-crash on a missing key. fetch.py checks for a valid key itself right
+# before making the actual API call, where it's genuinely required.
 
 CMC_BASE_URL = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest"
 
 # --- Request parameters ---
 LISTING_START = "1"
-LISTING_LIMIT = "50"      # bumped from 15 -> 50 for richer sector/coin coverage
+LISTING_LIMIT = "50"
 CONVERT_CURRENCY = "USD"
 
 # --- Scheduling ---
-# Free-tier CMC plans allow ~333 calls/day. Spacing calls across the day
-# instead of hammering them back-to-back avoids burning the whole quota
-# in one sitting and gives you a full day's worth of time-series data.
 CALLS_PER_DAY = 333
 SECONDS_PER_DAY = 24 * 60 * 60
 INTERVAL_SECONDS = SECONDS_PER_DAY // CALLS_PER_DAY  # ~259 seconds (~4.3 min)
 
 # --- Retry behavior ---
 MAX_RETRIES = 3
-RETRY_BACKOFF_SECONDS = 10  # doubles each retry: 10s, 20s, 40s
+RETRY_BACKOFF_SECONDS = 10
 
 # --- MySQL (staging + curated layers) ---
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
