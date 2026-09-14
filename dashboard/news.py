@@ -1,21 +1,16 @@
 """
 Live news + sentiment matching for today's top movers - now using Currents API.
-
-Why the switch from cryptocurrency.cv:
-- Its /api/news free tier, despite marketing 2,655+ articles, only actually
-  served a handful of unrelated regulatory articles in practice - not
-  usable for real coin-specific matching.
-- NewsAPI.org's free tier explicitly forbids production/live-domain use
-  (localhost only) - would break the moment it hit our deployed Render URL.
-- Currents API's free tier (250 req/day) explicitly permits production use
-  and returns genuinely relevant, real-outlet crypto articles when searched
-  by keyword - confirmed via live test before building this.
-
-Design:
-- One search call per coin (keywords=<coin name>), not a single bulk pull -
-  Currents' /v1/search is keyword-driven, unlike the old bulk-feed approach.
-- Sentiment analysis still runs entirely offline via VADER - no added cost.
-- Scoped to today's top movers only (live/current), same as before.
+...
+Relevance filtering:
+Some coin names/symbols are common English words (NEAR, SUI, ATOM, ONDO) that
+match plenty of totally unrelated articles via plain keyword search. To fix
+this without losing recall on unambiguous names (Zcash, Bitcoin), we:
+1. Search with the coin name PLUS a crypto-context term, not the bare name -
+   narrows the search itself before results even come back.
+2. Post-filter every result: require at least one crypto/finance context word
+   to actually appear in the title or description. A "NEAR" article that
+   never mentions crypto/blockchain/token/price anywhere gets dropped, even
+   though it matched the search keyword.
 """
 
 import logging
@@ -31,13 +26,31 @@ REQUEST_TIMEOUT = 10
 
 _analyzer = SentimentIntensityAnalyzer()
 
+# If any of these appear in the title or description, the article is treated
+# as genuinely crypto-related. Deliberately broad so real crypto news (which
+# might not literally say "crypto") still passes - e.g. "trading", "market",
+# "exchange", "wallet" catch coverage that talks about price/trading without
+# using the word "crypto" itself.
+CRYPTO_CONTEXT_WORDS = [
+    "crypto", "cryptocurrency", "blockchain", "token", "coin", "defi",
+    "web3", "bitcoin", "ethereum", "altcoin", "trading", "exchange",
+    "wallet", "market cap", "price", "rally", "surge", "plunge",
+]
 
-def fetch_news_for_coin(coin_name: str, page_size: int = 5) -> list[dict]:
+
+def _is_crypto_relevant(article: dict) -> bool:
+    text = f"{article.get('title', '')} {article.get('description', '')}".lower()
+    return any(word in text for word in CRYPTO_CONTEXT_WORDS)
+
+
+def fetch_news_for_coin(coin_name: str, page_size: int = 8) -> list[dict]:
     """
-    Searches Currents API directly by coin name - one call per coin, since
-    the search endpoint is keyword-driven (unlike a bulk feed we'd filter
-    client-side). Returns an empty list on any failure or missing key, so
-    a news problem never breaks the rest of the dashboard.
+    Searches Currents API by coin name + a crypto-context term (rather than
+    the bare name), then filters results for genuine crypto relevance. This
+    two-step approach handles common-English-word coin names (NEAR, SUI,
+    ATOM) without needing a manual exception list per coin.
+    Returns an empty list on any failure or missing key, so a news problem
+    never breaks the rest of the dashboard.
     """
     if not CURRENTS_API_KEY:
         logger.warning("CURRENTS_API_KEY not set - skipping news fetch.")
@@ -47,7 +60,7 @@ def fetch_news_for_coin(coin_name: str, page_size: int = 5) -> list[dict]:
         response = requests.get(
             SEARCH_URL,
             params={
-                "keywords": coin_name,
+                "keywords": f"{coin_name} cryptocurrency",
                 "language": "en",
                 "page_size": page_size,
                 "apiKey": CURRENTS_API_KEY,
@@ -56,7 +69,9 @@ def fetch_news_for_coin(coin_name: str, page_size: int = 5) -> list[dict]:
         )
         response.raise_for_status()
         data = response.json()
-        return data.get("news", [])
+        raw_articles = data.get("news", [])
+        relevant = [a for a in raw_articles if _is_crypto_relevant(a)]
+        return relevant
     except Exception as e:
         logger.warning(f"News fetch failed for {coin_name}: {e}")
         return []
